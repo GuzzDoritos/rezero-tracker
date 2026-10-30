@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Re:ゼロから始める異世界生活 — READING ARCHIVE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Official-style Top Navigation Bar -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="site-brand">
+        <span class="brand-jp">Re:ゼロから始める異世界生活</span>
+        <span class="brand-divider">｜</span>
+        <span class="brand-en">READING ARCHIVE</span>
+      </div>
+
+      <nav class="site-nav">
+        <a href="#sec-overview">OVERVIEW</a>
+        <a href="#sec-series">SERIES</a>
+        <a href="#sec-checklist">CHECKLIST</a>
+        <a href="#sec-history">HISTORY</a>
+        <a href="#sec-books">BOOKS</a>
+      </nav>
+
+      <div class="header-tools">
+        <label for="paceWindow" class="tool-label">PACE</label>
+        <select id="paceWindow" class="flat-select">
+          <option value="7">7 DAYS</option>
+          <option value="14">14 DAYS</option>
+          <option value="30" selected>30 DAYS</option>
+          <option value="90">90 DAYS</option>
+          <option value="all">ALL TIME</option>
+        </select>
+        <button id="refreshBtn" class="flat-btn">RELOAD</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <!-- Section 01: OVERVIEW -->
+    <section class="editorial-section" id="sec-overview">
+      <div class="sec-heading">
+        <span class="sec-en">OVERVIEW</span>
+        <span class="sec-jp">◆ 総合読書進捗 ◆</span>
+      </div>
+
+      <div class="overview-frame">
+        <div class="overview-primary">
+          <div class="ov-top-row">
+            <div>
+              <div class="ov-caption">TOTAL COMPLETION RATE</div>
+              <div class="ov-giant-num" id="overallPctText">--%</div>
+            </div>
+            <div class="ov-books-box">
+              <span class="ov-caption">VOLUMES COMPLETED</span>
+              <div class="ov-books-num" id="overallBooksPill">-- / --</div>
+            </div>
+          </div>
+
+          <div class="sharp-bar lg">
+            <div class="sharp-bar-fill" id="overallProgressBar" style="width: 0%"></div>
+          </div>
+
+          <div class="ov-metrics-table">
+            <div class="ov-cell">
+              <span class="cell-label">READ CHARACTERS / 既読文字数</span>
+              <strong class="cell-val" id="overallReadChars">--</strong>
+            </div>
+            <div class="ov-cell">
+              <span class="cell-label">REMAINING / 残り文字数</span>
+              <strong class="cell-val" id="overallRemChars">--</strong>
+            </div>
+            <div class="ov-cell">
+              <span class="cell-label">TOTAL / 総文字数</span>
+              <strong class="cell-val" id="overallTotalChars">--</strong>
+            </div>
+            <div class="ov-cell">
+              <span class="cell-label">TIME LOGGED / 累計読書時間</span>
+              <strong class="cell-val" id="overallTimeLogged">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="overview-pace">
+          <div class="pace-header" id="paceCardEyebrow">RECORDED PACE — 30 DAYS</div>
+          <div class="pace-main-stat">
+            <span class="pace-num" id="paceCharsPerDay">--</span>
+            <span class="pace-unit">文字 / 日 (chars/day)</span>
+          </div>
+          <dl class="pace-dl">
+            <div class="pace-dl-row">
+              <dt>読書速度 (Speed)</dt>
+              <dd id="paceCharsPerHour">-- chars/hr</dd>
+            </div>
+            <div class="pace-dl-row">
+              <dt>1日平均時間 (Daily Time)</dt>
+              <dd id="paceHoursPerDay">-- hrs/day</dd>
+            </div>
+            <div class="pace-dl-row">
+              <dt>全巻読了に必要な時間</dt>
+              <dd id="overallTimeRemaining">--</dd>
+            </div>
+            <div class="pace-dl-row highlight-row">
+              <dt>全巻読了予定日 (Est. Finish)</dt>
+              <dd id="overallFinishDate">--</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div class="source-footnote" id="statePathSubtitle"></div>
+    </section>
+
+    <!-- Section 02: SERIES -->
+    <section class="editorial-section" id="sec-series">
+      <div class="sec-heading">
+        <span class="sec-en">SERIES</span>
+        <span class="sec-jp">◆ シリーズ別進捗 ◆</span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="editorial-table">
+          <thead>
+            <tr>
+              <th>SERIES / シリーズ</th>
+              <th class="center">VOLUMES</th>
+              <th class="num">READ / 既読</th>
+              <th class="num">TOTAL / 総計</th>
+              <th class="num">REMAINING / 残り</th>
+              <th style="width: 200px;">PROGRESS / 進捗率</th>
+              <th class="num">ACTIVE HOURS</th>
+              <th class="num">EST. FINISH / 完了予定</th>
+            </tr>
+          </thead>
+          <tbody id="seriesTableBody"></tbody>
+          <tfoot id="seriesTableFoot"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 03: CHECKLIST -->
+    <section class="editorial-section" id="sec-checklist">
+      <div class="sec-heading">
+        <span class="sec-en">CHECKLIST</span>
+        <span class="sec-jp">◆ 指定課題・読了予定リスト ◆</span>
+      </div>
+
+      <div class="checklist-panel">
+        <div class="checklist-top">
+          <div class="checklist-title-group">
+            <span class="cell-label">TARGET MILESTONE</span>
+            <input id="milestoneNameInput" class="editorial-input" value="Road to Volume 21" />
+          </div>
+
+          <div class="checklist-stats">
+            <div class="cl-stat">
+              <span class="cell-label">REMAINING CHARS</span>
+              <strong id="msRemChars">--</strong>
+            </div>
+            <div class="cl-stat">
+              <span class="cell-label">NET READING TIME</span>
+              <strong id="msActiveHours">--</strong>
+            </div>
+            <div class="cl-stat">
+              <span class="cell-label">DAYS REMAINING</span>
+              <strong id="msDaysLeft">--</strong>
+            </div>
+            <div class="cl-stat crimson">
+              <span class="cell-label">TARGET COMPLETION DATE</span>
+              <strong id="msFinishDate">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="sharp-bar">
+          <div class="sharp-bar-fill crimson-fill" id="msProgressBar" style="width: 0%"></div>
+        </div>
+        <div class="checklist-sub">
+          <span id="msProgressLabel">-- / -- chars (--%)</span>
+          <span id="msBooksCountLabel">-- volumes selected</span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="editorial-table compact">
+            <thead>
+              <tr>
+                <th class="center" style="width: 44px;">NO.</th>
+                <th>VOLUME / 書名</th>
+                <th>CATEGORY</th>
+                <th class="center">STATUS</th>
+                <th class="num">READ</th>
+                <th class="num">TOTAL</th>
+                <th class="num">REMAINING</th>
+                <th class="num">EST. HOURS</th>
+                <th class="center" style="width: 90px;">REMOVE</th>
+              </tr>
+            </thead>
+            <tbody id="milestoneTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 04: HISTORY -->
+    <section class="editorial-section" id="sec-history">
+      <div class="sec-heading">
+        <span class="sec-en">HISTORY</span>
+        <span class="sec-jp">◆ 読書推移・記録 ◆</span>
+      </div>
+
+      <!-- All-Time Reading Heatmap & Day Inspector -->
+      <div class="heatmap-container">
+        <div class="chart-frame-head">
+          <span>ALL-TIME READING HEATMAP</span>
+          <div class="heatmap-head-right">
+            <span class="chart-sub" id="heatmapSummaryLabel">-- ACTIVE DAYS</span>
+            <div class="heatmap-legend" title="Characters read per day">
+              <span>LESS</span>
+              <i class="hm-swatch lv-0"></i>
+              <i class="hm-swatch lv-1"></i>
+              <i class="hm-swatch lv-2"></i>
+              <i class="hm-swatch lv-3"></i>
+              <i class="hm-swatch lv-4"></i>
+              <span>MORE</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="heatmap-scroll-wrap">
+          <div class="heatmap-board" id="heatmapBoard"></div>
+        </div>
+
+        <!-- Selected Day Inspector -->
+        <div class="day-inspector" id="dayInspector">
+          <div class="day-inspector-top">
+            <div class="day-date-box">
+              <span class="cell-label">SELECTED DATE / 選択日</span>
+              <strong class="day-date-title" id="inspDateTitle">—</strong>
+            </div>
+
+            <div class="day-metrics-row">
+              <div class="day-metric">
+                <span class="cell-label">TOTAL READ / 読書量</span>
+                <strong id="inspTotalChars">0 chars</strong>
+              </div>
+              <div class="day-metric">
+                <span class="cell-label">READING TIME / 時間</span>
+                <strong id="inspTotalTime">00h00m</strong>
+              </div>
+              <div class="day-metric">
+                <span class="cell-label">SPEED / 読書速度</span>
+                <strong id="inspSpeed">0 chars/hr</strong>
+              </div>
+              <div class="day-metric">
+                <span class="cell-label">SESSIONS / 回数</span>
+                <strong id="inspSessions">0</strong>
+              </div>
+            </div>
+          </div>
+
+          <div id="inspBooksWrap"></div>
+        </div>
+      </div>
+
+      <div class="charts-split">
+        <div class="chart-frame">
+          <div class="chart-frame-head">
+            <span>CUMULATIVE CHARACTERS READ</span>
+            <span class="chart-sub">累計読書文字数推移</span>
+          </div>
+          <div class="canvas-holder">
+            <canvas id="cumulativeCanvas" width="580" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-frame">
+          <div class="chart-frame-head">
+            <span>DAILY OUTPUT (LAST 30 DAYS)</span>
+            <span class="chart-sub">日別読書量（過去30日間）</span>
+          </div>
+          <div class="canvas-holder">
+            <canvas id="dailyCanvas" width="580" height="220"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 05: BOOKS -->
+    <section class="editorial-section" id="sec-books">
+      <div class="sec-heading">
+        <span class="sec-en">BOOKS</span>
+        <span class="sec-jp">◆ 書籍一覧 <span id="bookshelfCount">(0)</span> ◆</span>
+      </div>
+
+      <div class="catalog-controls">
+        <div class="tab-strip" id="seriesFilterGroup">
+          <button class="strip-btn active" data-series="all">ALL</button>
+          <button class="strip-btn" data-series="main">本編 (MAIN)</button>
+          <button class="strip-btn" data-series="tanpenshuu">短編集 (TANPENSHUU)</button>
+          <button class="strip-btn" data-series="ex">EX (EX NOVELS)</button>
+          <button class="strip-btn" data-series="shouhenshuu">小編集 (ART BOX)</button>
+        </div>
+
+        <div class="tab-strip" id="statusFilterGroup">
+          <button class="strip-btn active" data-status="all">ALL</button>
+          <button class="strip-btn" data-status="in_progress">READING</button>
+          <button class="strip-btn" data-status="milestone">CHECKLIST</button>
+          <button class="strip-btn" data-status="unread">UNREAD</button>
+          <button class="strip-btn" data-status="completed">COMPLETED</button>
+        </div>
+      </div>
+
+      <div class="book-lineup" id="booksGrid"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Re:ZERO READING ARCHIVE — Powered by local Hoshi Reader state</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Compiled release bundle & runtime user state
+/release/
+*.exe
+*.dll
+config.json
+checklist.json
+
+# Rust / Tauri build artifacts
+/src-tauri/target/
+/src-tauri/dist/
+/src-tauri/gen/
