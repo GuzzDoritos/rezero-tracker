@@ -20,6 +20,7 @@ A standalone native Windows desktop application built with **Tauri v2** (Rust ba
 rezero-tracker/
 ├── .gitignore                  # Ignores release/, target/, dist/, gen/, *.exe, *.dll, runtime .json
 ├── AGENTS.md                   # Project architecture & build documentation
+├── build.bat                   # One-click Windows build + run script
 ├── index.html                  # UI markup (Editorial light theme)
 ├── style.css                   # Styling (Cinzel, Shippori Mincho, Noto Sans JP)
 ├── app.js                      # Frontend logic (invokes Tauri commands & listens to events)
@@ -59,7 +60,9 @@ Rust (`stable-x86_64-pc-windows-gnu`) and portable MinGW-w64 (`16.2.0`) are inst
 - **Cargo / Rust:** `%USERPROFILE%\.cargo\bin`
 - **MinGW-w64:** `%USERPROFILE%\.local-tools\mingw64\bin`
 
-To build and update `release/rezero-tracker.exe`:
+To build and launch `release/rezero-tracker.exe`, simply double-click **`build.bat`** in the project root (or run `.\build.bat` in PowerShell).
+
+Manual PowerShell equivalent:
 ```powershell
 $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:USERPROFILE\.local-tools\mingw64\bin;$env:PATH"
 Set-Location "c:\Users\gustavo.bragada\Downloads\rezero-tracker\src-tauri"
