@@ -21,9 +21,9 @@ rezero-tracker/
 ├── .gitignore                  # Ignores release/, target/, dist/, gen/, *.exe, *.dll, runtime .json
 ├── AGENTS.md                   # Project architecture & build documentation
 ├── build.bat                   # One-click Windows build + run script
-├── index.html                  # UI markup (Editorial light theme)
+├── index.html                  # Desktop UI shell (frameless titlebar, sidebar, instant views, book inspector, settings modal)
 ├── style.css                   # Styling (Cinzel, Shippori Mincho, Noto Sans JP)
-├── app.js                      # Frontend logic (invokes Tauri commands & listens to events)
+├── app.js                      # Frontend logic (Tauri IPC, window controls, view switching, book inspector, settings modal)
 ├── release/                    # [GITIGNORED] Standalone distribution & runtime config folder
 │   ├── rezero-tracker.exe      # Built release executable
 │   ├── WebView2Loader.dll      # Required runtime loader DLL next to rezero-tracker.exe

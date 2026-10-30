@@ -12,12 +12,13 @@
       {
         "label": "main",
         "title": "Re:ゼロから始める異世界生活 — READING ARCHIVE",
-        "width": 1340,
-        "height": 900,
-        "minWidth": 900,
+        "width": 1380,
+        "height": 880,
+        "minWidth": 980,
         "minHeight": 640,
         "resizable": true,
-        "center": true
+        "center": true,
+        "decorations": false
       }
     ],
     "security": {

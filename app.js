@@ -1,12 +1,16 @@
 let stateData = null;
 let selectedPaceWindow = "30";
+let activeView = "dashboard";
 let activeSeriesFilter = "all";
 let activeStatusFilter = "all";
+let bookSearchQuery = "";
+let selectedBookStem = null;
 let milestoneName = "Road to Volume 21";
 let milestoneStems = new Set();
 let selectedHeatmapDate = null;
 let dailyDetailsMap = new Map();
 let bookLookupMap = new Map();
+let bookSessionsMap = new Map();
 
 const fmtNum = (n) => Math.round(n).toLocaleString("en-US");
 const fmtDec = (n, d = 1) => Number(n).toFixed(d);
@@ -15,6 +19,33 @@ function getCoverUrl(stem, gen, coverFile) {
   const qs = `stem=${encodeURIComponent(stem)}&gen=${gen}&file=${encodeURIComponent(coverFile)}`;
   return `http://rezero.localhost/cover?${qs}`;
 }
+
+const DEFAULT_SHELF_PRESETS = {
+  "Re:ゼロ": {
+    slug: "main",
+    name: "Main Novels",
+    categoryLabel: "本編 (Main Novels)",
+    filterLabel: "本編 (MAIN)",
+  },
+  "Re:ゼロ 短編集": {
+    slug: "tanpenshuu",
+    name: "Tanpenshuu (短編集)",
+    categoryLabel: "短編集 (Tanpenshuu)",
+    filterLabel: "短編集 (TANPENSHUU)",
+  },
+  "Re:ゼロ Ex": {
+    slug: "ex",
+    name: "EX Novels",
+    categoryLabel: "Ex (EX Novels)",
+    filterLabel: "EX (EX NOVELS)",
+  },
+  "Re:ゼロ 小編集": {
+    slug: "shouhenshuu",
+    name: "Shouhenshuu (小編集)",
+    categoryLabel: "小編集 (Shouhenshuu)",
+    filterLabel: "小編集 (ART BOX)",
+  },
+};
 
 const SERIES_LABELS = {
   main: "本編 (Main Novels)",
@@ -29,36 +60,6 @@ function getSeriesCategoryLabel(slug) {
     if (found && found.categoryLabel) return found.categoryLabel;
   }
   return SERIES_LABELS[slug] || slug;
-}
-
-function renderSeriesFilterStrip() {
-  const group = document.getElementById("seriesFilterGroup");
-  if (!group || !stateData || !stateData.series) return;
-  group.innerHTML = "";
-
-  const allBtn = document.createElement("button");
-  allBtn.className = `strip-btn${activeSeriesFilter === "all" ? " active" : ""}`;
-  allBtn.dataset.series = "all";
-  allBtn.textContent = "ALL";
-  allBtn.onclick = () => {
-    activeSeriesFilter = "all";
-    updateFilterButtons();
-    renderBookshelf();
-  };
-  group.appendChild(allBtn);
-
-  for (const s of stateData.series) {
-    const btn = document.createElement("button");
-    btn.className = `strip-btn${activeSeriesFilter === s.slug ? " active" : ""}`;
-    btn.dataset.series = s.slug;
-    btn.textContent = s.filterLabel || s.name.toUpperCase();
-    btn.onclick = () => {
-      activeSeriesFilter = s.slug;
-      updateFilterButtons();
-      renderBookshelf();
-    };
-    group.appendChild(btn);
-  }
 }
 
 const WEEKDAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -95,9 +96,30 @@ function formatDateEditorial(dateObj) {
   return `${yyyy}.${mm}.${dd}`;
 }
 
+function switchView(viewId) {
+  activeView = viewId;
+  document.querySelectorAll("#sidebarNav .nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === viewId);
+  });
+  document.querySelectorAll(".view-pane").forEach((pane) => {
+    pane.classList.toggle("active", pane.id === `view-${viewId}`);
+  });
+  if (viewId === "analytics" && stateData) {
+    requestAnimationFrame(() => renderCharts());
+  }
+}
+
+function inspectBookInLibrary(stem) {
+  selectedBookStem = stem;
+  switchView("library");
+  renderBookshelf();
+  renderBookInspector();
+}
+
 function buildDailyDetailsMap() {
   dailyDetailsMap = new Map();
   bookLookupMap = new Map();
+  bookSessionsMap = new Map();
   if (!stateData) return;
 
   for (const s of stateData.series || []) {
@@ -107,6 +129,11 @@ function buildDailyDetailsMap() {
   }
 
   for (const sess of stateData.sessions || []) {
+    if (!bookSessionsMap.has(sess.stem)) {
+      bookSessionsMap.set(sess.stem, []);
+    }
+    bookSessionsMap.get(sess.stem).push(sess);
+
     if (!sess.endedAt) continue;
     const dKey = toDateKey(sess.endedAt);
     if (!dailyDetailsMap.has(dKey)) {
@@ -142,6 +169,13 @@ function buildDailyDetailsMap() {
   if (!selectedHeatmapDate && dailyDetailsMap.size > 0) {
     const sortedKeys = Array.from(dailyDetailsMap.keys()).sort();
     selectedHeatmapDate = sortedKeys[sortedKeys.length - 1];
+  }
+
+  // Pick default selected book for the Library Inspector
+  if (!selectedBookStem || !bookLookupMap.has(selectedBookStem)) {
+    const allBooks = (stateData.series || []).flatMap((s) => s.books || []);
+    const inProg = allBooks.find((b) => b.status === "in_progress");
+    selectedBookStem = inProg ? inProg.stem : allBooks.length > 0 ? allBooks[0].stem : null;
   }
 }
 
@@ -209,10 +243,51 @@ function toggleMilestoneStem(stem) {
   renderAll();
 }
 
+function renderSidebarAndStatus() {
+  const ov = stateData.overall;
+  const sessCount = (stateData.sessions || []).length;
+
+  document.getElementById("statePathSubtitle").textContent =
+    `LIVE WATCHER: ${stateData.stateDir}`;
+  document.getElementById("statusTotalsLabel").textContent =
+    `${ov.completedBooks}/${ov.totalBooks} VOLUMES · ${sessCount} SESSIONS`;
+
+  document.getElementById("navChecklistCount").textContent = `(${milestoneStems.size})`;
+  document.getElementById("navLibraryCount").textContent = `(${ov.totalBooks})`;
+
+  // Pinned "Now Reading" card
+  const allBooks = (stateData.series || []).flatMap((s) => s.books || []);
+  let activeBook = allBooks.find((b) => b.status === "in_progress");
+  let eyebrowText = "NOW READING";
+
+  if (!activeBook) {
+    // Fallback to first unread book in checklist, or first book
+    activeBook = allBooks.find((b) => milestoneStems.has(b.stem) && b.status !== "completed") || allBooks[0];
+    eyebrowText = activeBook ? "UP NEXT IN QUEUE" : "NO ACTIVE VOLUME";
+  }
+
+  const card = document.getElementById("nowReadingCard");
+  if (!activeBook) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "block";
+  document.getElementById("nrEyebrow").textContent = eyebrowText;
+  document.getElementById("nrTitle").textContent = shortBookTitle(activeBook.title);
+  document.getElementById("nrProgressBar").style.width = `${Math.min(100, activeBook.progressPct)}%`;
+  document.getElementById("nrChars").textContent =
+    `${fmtNum(activeBook.readChars)} / ${fmtNum(activeBook.totalChars)}`;
+  document.getElementById("nrPct").textContent = `${fmtDec(activeBook.progressPct, 1)}%`;
+
+  const coverEl = document.getElementById("nrCover");
+  coverEl.style.display = "block";
+  coverEl.src = getCoverUrl(activeBook.stem, activeBook.generation, activeBook.coverFile);
+
+  card.onclick = () => inspectBookInLibrary(activeBook.stem);
+}
+
 function renderOverview(pace) {
   const ov = stateData.overall;
-  document.getElementById("statePathSubtitle").textContent =
-    `SOURCE: ${stateData.stateDir}`;
 
   document.getElementById("overallPctText").textContent = `${fmtDec(ov.progressPct, 2)}%`;
   document.getElementById("overallBooksPill").textContent =
@@ -293,7 +368,7 @@ function renderSeriesTable(pace) {
       activeSeriesFilter = s.slug;
       updateFilterButtons();
       renderBookshelf();
-      document.getElementById("sec-books").scrollIntoView({ behavior: "smooth" });
+      switchView("library");
     };
 
     tbody.appendChild(tr);
@@ -373,7 +448,7 @@ function renderMilestone(pace) {
 
     tr.innerHTML = `
       <td class="center">${String(idx + 1).padStart(2, "0")}</td>
-      <td style="font-family:var(--font-mincho);font-weight:700;">${shortBookTitle(b.title)}</td>
+      <td class="series-name-cell">${shortBookTitle(b.title)}</td>
       <td>${getSeriesCategoryLabel(b.series)}</td>
       <td class="center"><span class="tbl-status ${b.status}">${statusText}</span></td>
       <td class="num">${fmtNum(b.readChars)}</td>
@@ -384,7 +459,11 @@ function renderMilestone(pace) {
         <button class="tbl-remove-btn" data-stem="${b.stem}">REMOVE</button>
       </td>
     `;
-    tr.querySelector(".tbl-remove-btn").onclick = () => toggleMilestoneStem(b.stem);
+    tr.querySelector(".series-name-cell").onclick = () => inspectBookInLibrary(b.stem);
+    tr.querySelector(".tbl-remove-btn").onclick = (e) => {
+      e.stopPropagation();
+      toggleMilestoneStem(b.stem);
+    };
     tbody.appendChild(tr);
   });
 }
@@ -415,7 +494,6 @@ function renderHeatmap() {
     startDate.setHours(12, 0, 0, 0);
   }
 
-  // Align start to Sunday and end to Saturday
   const firstSun = new Date(startDate);
   firstSun.setDate(firstSun.getDate() - firstSun.getDay());
 
@@ -454,12 +532,10 @@ function renderHeatmap() {
     weekIdx++;
   }
 
-  // Compute total active days & total span days
   const totalSpanDays = Math.round((endDate - startDate) / (86400 * 1000)) + 1;
   document.getElementById("heatmapSummaryLabel").textContent =
     `${dailyDetailsMap.size} ACTIVE DAYS / ${totalSpanDays} TOTAL DAYS`;
 
-  // Month row
   const monthsRow = document.createElement("div");
   monthsRow.className = "hm-months-row";
   for (const ml of monthLabels) {
@@ -471,7 +547,6 @@ function renderHeatmap() {
   }
   board.appendChild(monthsRow);
 
-  // Body row: weekday labels + week columns
   const bodyRow = document.createElement("div");
   bodyRow.className = "hm-body-row";
 
@@ -498,16 +573,17 @@ function renderHeatmap() {
       } else {
         const chars = cell.dayData ? cell.dayData.totalChars : 0;
         const sec = cell.dayData ? cell.dayData.totalSec : 0;
-        const cph = sec > 0 ? (chars / (sec / 3600)) : 0;
+        const cph = sec > 0 ? chars / (sec / 3600) : 0;
         const lv = getHeatmapLevel(chars);
         const isSel = cell.dKey === selectedHeatmapDate;
 
         tile.className = `hm-tile lv-${lv}${isSel ? " selected" : ""}`;
         tile.dataset.date = cell.dKey;
         const dispDate = cell.dKey.replace(/-/g, ".");
-        tile.title = chars > 0
-          ? `${dispDate} — ${fmtNum(chars)} chars · ${formatHHMM(sec)} · ${fmtNum(cph)} chars/hr`
-          : `${dispDate} — No reading logged`;
+        tile.title =
+          chars > 0
+            ? `${dispDate} — ${fmtNum(chars)} chars · ${formatHHMM(sec)} · ${fmtNum(cph)} chars/hr`
+            : `${dispDate} — No reading logged`;
 
         tile.onclick = () => {
           selectedHeatmapDate = cell.dKey;
@@ -568,6 +644,7 @@ function renderDayInspector(dateKey) {
 
     const card = document.createElement("div");
     card.className = "day-book-card";
+    card.title = "Click to inspect this volume in Library";
     card.innerHTML = `
       <img class="day-book-thumb" src="${coverUrl}" alt="${b.title}" loading="lazy" onerror="this.style.opacity='0.1'" />
       <div class="day-book-meta">
@@ -576,10 +653,11 @@ function renderDayInspector(dateKey) {
           <span>Read: <strong>${fmtNum(b.chars)} chars</strong></span>
           <span>Time: <strong>${formatHHMM(b.sec)}</strong></span>
           <span>Speed: <strong>${fmtNum(bookCph)} c/hr</strong></span>
-          <span>Progress: <strong>${fmtDec(bookPct, 1)}%</strong></span>
+          <span>Share: <strong>${fmtDec(bookPct, 1)}%</strong></span>
         </div>
       </div>
     `;
+    card.onclick = () => inspectBookInLibrary(b.stem);
     grid.appendChild(card);
   }
 
@@ -587,15 +665,18 @@ function renderDayInspector(dateKey) {
 }
 
 function renderCharts() {
+  if (activeView !== "analytics") return;
   drawCumulativeChart();
   drawDailyChart();
 }
 
 function drawCumulativeChart() {
   const canvas = document.getElementById("cumulativeCanvas");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
@@ -675,9 +756,11 @@ function drawCumulativeChart() {
 
 function drawDailyChart() {
   const canvas = document.getElementById("dailyCanvas");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
@@ -756,6 +839,36 @@ function drawDailyChart() {
   ctx.fillText(days[days.length - 1].date.slice(5).replace("-", "."), W - padR, H - 6);
 }
 
+function renderSeriesFilterStrip() {
+  const group = document.getElementById("seriesFilterGroup");
+  if (!group || !stateData || !stateData.series) return;
+  group.innerHTML = "";
+
+  const allBtn = document.createElement("button");
+  allBtn.className = `strip-btn${activeSeriesFilter === "all" ? " active" : ""}`;
+  allBtn.dataset.series = "all";
+  allBtn.textContent = "ALL";
+  allBtn.onclick = () => {
+    activeSeriesFilter = "all";
+    updateFilterButtons();
+    renderBookshelf();
+  };
+  group.appendChild(allBtn);
+
+  for (const s of stateData.series) {
+    const btn = document.createElement("button");
+    btn.className = `strip-btn${activeSeriesFilter === s.slug ? " active" : ""}`;
+    btn.dataset.series = s.slug;
+    btn.textContent = s.filterLabel || s.name.toUpperCase();
+    btn.onclick = () => {
+      activeSeriesFilter = s.slug;
+      updateFilterButtons();
+      renderBookshelf();
+    };
+    group.appendChild(btn);
+  }
+}
+
 function renderBookshelf() {
   const grid = document.getElementById("booksGrid");
   grid.innerHTML = "";
@@ -771,13 +884,20 @@ function renderBookshelf() {
       books = books.filter((b) => b.status === activeStatusFilter);
     }
   }
+  if (bookSearchQuery.trim() !== "") {
+    const q = bookSearchQuery.trim().toLowerCase();
+    books = books.filter(
+      (b) => b.title.toLowerCase().includes(q) || b.stem.toLowerCase().includes(q)
+    );
+  }
 
-  document.getElementById("bookshelfCount").textContent = `(${books.length})`;
+  document.getElementById("bookshelfCount").textContent = `${books.length}`;
 
   for (const b of books) {
     const inMilestone = milestoneStems.has(b.stem);
+    const isSelected = b.stem === selectedBookStem;
     const item = document.createElement("div");
-    item.className = `volume-item status-${b.status}`;
+    item.className = `volume-item status-${b.status}${isSelected ? " selected-book" : ""}`;
 
     const coverUrl = getCoverUrl(b.stem, b.generation, b.coverFile);
     const ribbonText =
@@ -809,8 +929,104 @@ function renderBookshelf() {
       </div>
     `;
 
-    item.querySelector(".vol-btn").onclick = () => toggleMilestoneStem(b.stem);
+    item.onclick = () => {
+      selectedBookStem = b.stem;
+      renderBookshelf();
+      renderBookInspector();
+    };
+
+    item.querySelector(".vol-btn").onclick = (e) => {
+      e.stopPropagation();
+      toggleMilestoneStem(b.stem);
+    };
+
     grid.appendChild(item);
+  }
+}
+
+function renderBookInspector() {
+  if (!stateData || !selectedBookStem) return;
+  const b = bookLookupMap.get(selectedBookStem);
+  if (!b) return;
+
+  const pace = computePaceStats();
+  const inMilestone = milestoneStems.has(b.stem);
+
+  const biCoverEl = document.getElementById("biCover");
+  biCoverEl.style.opacity = "1";
+  biCoverEl.src = getCoverUrl(b.stem, b.generation, b.coverFile);
+  document.getElementById("biSeriesTag").textContent = getSeriesCategoryLabel(b.series);
+  document.getElementById("biTitle").textContent = shortBookTitle(b.title);
+
+  const badge = document.getElementById("biStatusBadge");
+  badge.className = `vol-ribbon bi-status-pill ${b.status}`;
+  badge.textContent =
+    b.status === "completed"
+      ? "COMPLETED"
+      : b.status === "in_progress"
+      ? `READING ${fmtDec(b.progressPct, 1)}%`
+      : "UNREAD";
+
+  const bar = document.getElementById("biProgressBar");
+  bar.className = `sharp-bar-fill ${b.status === "in_progress" ? "crimson-fill" : ""}`;
+  bar.style.width = `${Math.min(100, b.progressPct)}%`;
+
+  document.getElementById("biCharsLabel").textContent =
+    `${fmtNum(b.readChars)} / ${fmtNum(b.totalChars)} chars`;
+  document.getElementById("biPctLabel").textContent = `${fmtDec(b.progressPct, 2)}%`;
+
+  const clBtn = document.getElementById("biChecklistBtn");
+  clBtn.className = `vol-btn bi-checklist-btn ${inMilestone ? "in-queue" : ""}`;
+  clBtn.textContent = inMilestone ? "◆ IN TARGET CHECKLIST" : "+ ADD TO TARGET CHECKLIST";
+  clBtn.onclick = () => toggleMilestoneStem(b.stem);
+
+  const bookCph =
+    b.readingTimeSec > 0 ? b.sessionChars / (b.readingTimeSec / 3600) : 0;
+  const estRemSec =
+    b.remainingChars > 0
+      ? bookCph > 0
+        ? (b.remainingChars / bookCph) * 3600
+        : pace.cph > 0
+        ? (b.remainingChars / pace.cph) * 3600
+        : 0
+      : 0;
+
+  document.getElementById("biActiveTime").textContent = formatHHMM(b.readingTimeSec);
+  document.getElementById("biAvgSpeed").textContent =
+    bookCph > 0 ? `${fmtNum(bookCph)} c/hr` : "—";
+  document.getElementById("biFirstStarted").textContent = b.firstStartedAt
+    ? formatDateEditorial(new Date(b.firstStartedAt))
+    : "—";
+  document.getElementById("biLastEnded").textContent = b.lastEndedAt
+    ? formatDateEditorial(new Date(b.lastEndedAt))
+    : "—";
+  document.getElementById("biRemChars").textContent = fmtNum(b.remainingChars);
+  document.getElementById("biEstTimeLeft").textContent =
+    b.remainingChars === 0 ? "DONE" : estRemSec > 0 ? formatHHMM(estRemSec) : "—";
+
+  const sessions = (bookSessionsMap.get(b.stem) || [])
+    .slice()
+    .sort((a, b2) => b2.endedAt - a.endedAt);
+
+  document.getElementById("biSessionCountLabel").textContent = `${sessions.length} SESSIONS`;
+  const listEl = document.getElementById("biSessionList");
+  listEl.innerHTML = "";
+
+  if (sessions.length === 0) {
+    listEl.innerHTML = `<div class="day-empty-msg">No reading sessions logged for this volume yet.</div>`;
+    return;
+  }
+
+  for (const s of sessions) {
+    const dt = formatDateEditorial(new Date(s.endedAt));
+    const row = document.createElement("div");
+    row.className = "bi-session-item";
+    row.innerHTML = `
+      <strong>${dt}</strong>
+      <span>${fmtNum(s.charactersRead)} chars</span>
+      <span style="color:var(--ink-muted);">${formatHHMM(s.readingTime)}</span>
+    `;
+    listEl.appendChild(row);
   }
 }
 
@@ -823,10 +1039,93 @@ function updateFilterButtons() {
   });
 }
 
+function openSettingsModal() {
+  if (!stateData) return;
+  const modal = document.getElementById("settingsModal");
+  const cfg = stateData.config || { hoshiReaderDir: null, shelves: [] };
+
+  document.getElementById("cfgHoshiDirInput").value = cfg.hoshiReaderDir || "";
+  document.getElementById("cfgDiscoveredHint").textContent =
+    `Currently resolved state path: ${stateData.stateDir}`;
+
+  const activeShelfSet = new Set((cfg.shelves || []).map((s) => s.shelf));
+  const allShelves = Array.from(
+    new Set([
+      ...(stateData.availableShelves || []),
+      ...(cfg.shelves || []).map((s) => s.shelf),
+    ])
+  );
+
+  const listWrap = document.getElementById("cfgShelvesList");
+  listWrap.innerHTML = "";
+
+  for (const shelfName of allShelves) {
+    const checked = activeShelfSet.has(shelfName);
+    const label = document.createElement("label");
+    label.className = `shelf-check-item${checked ? " checked" : ""}`;
+    label.innerHTML = `
+      <input type="checkbox" value="${shelfName}" ${checked ? "checked" : ""} />
+      <span>${shelfName}</span>
+    `;
+    const cb = label.querySelector("input");
+    cb.onchange = () => label.classList.toggle("checked", cb.checked);
+    listWrap.appendChild(label);
+  }
+
+  modal.classList.add("open");
+}
+
+async function saveSettingsFromModal() {
+  const dirVal = document.getElementById("cfgHoshiDirInput").value.trim();
+  const checkedBoxes = Array.from(
+    document.querySelectorAll("#cfgShelvesList input[type='checkbox']:checked")
+  );
+
+  if (checkedBoxes.length === 0) {
+    alert("Please keep at least one shelf enabled.");
+    return;
+  }
+
+  const existingMap = new Map(
+    ((stateData && stateData.config && stateData.config.shelves) || []).map((s) => [s.shelf, s])
+  );
+
+  const shelves = checkedBoxes.map((cb, idx) => {
+    const shelfKey = cb.value;
+    if (existingMap.has(shelfKey)) {
+      return existingMap.get(shelfKey);
+    }
+    if (DEFAULT_SHELF_PRESETS[shelfKey]) {
+      return { shelf: shelfKey, ...DEFAULT_SHELF_PRESETS[shelfKey] };
+    }
+    return {
+      shelf: shelfKey,
+      slug: `shelf_${idx + 1}`,
+      name: shelfKey,
+      categoryLabel: shelfKey,
+      filterLabel: shelfKey.toUpperCase(),
+    };
+  });
+
+  const payload = {
+    hoshiReaderDir: dirVal === "" ? null : dirVal,
+    shelves,
+  };
+
+  try {
+    await window.__TAURI__.core.invoke("save_config", { payload });
+    document.getElementById("settingsModal").classList.remove("open");
+    await fetchData();
+  } catch (e) {
+    console.error("Failed to save config:", e);
+  }
+}
+
 function renderAll() {
   if (!stateData) return;
   buildDailyDetailsMap();
   const pace = computePaceStats();
+  renderSidebarAndStatus();
   renderOverview(pace);
   renderSeriesTable(pace);
   renderMilestone(pace);
@@ -834,6 +1133,7 @@ function renderAll() {
   renderCharts();
   renderSeriesFilterStrip();
   renderBookshelf();
+  renderBookInspector();
 }
 
 async function fetchData() {
@@ -855,26 +1155,43 @@ async function fetchData() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Window Controls (Frameless Titlebar)
+  if (window.__TAURI__ && window.__TAURI__.window) {
+    const appWindow = window.__TAURI__.window.getCurrentWindow();
+    document.getElementById("winMinBtn").onclick = () => appWindow.minimize();
+    document.getElementById("winMaxBtn").onclick = () => appWindow.toggleMaximize();
+    document.getElementById("winCloseBtn").onclick = () => appWindow.close();
+  }
+
+  // Sidebar View Navigation
+  document.querySelectorAll("#sidebarNav .nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => switchView(btn.dataset.view));
+  });
+
+  // Pace Window Selector
   document.getElementById("paceWindow").addEventListener("change", (e) => {
     selectedPaceWindow = e.target.value;
     renderAll();
   });
 
+  // Reload & Settings Modal
   document.getElementById("refreshBtn").addEventListener("click", fetchData);
+  document.getElementById("openSettingsBtn").addEventListener("click", openSettingsModal);
+  document.getElementById("closeSettingsBtn").addEventListener("click", () => {
+    document.getElementById("settingsModal").classList.remove("open");
+  });
+  document.getElementById("cancelSettingsBtn").addEventListener("click", () => {
+    document.getElementById("settingsModal").classList.remove("open");
+  });
+  document.getElementById("saveSettingsBtn").addEventListener("click", saveSettingsFromModal);
 
+  // Target Milestone Name Input
   document.getElementById("milestoneNameInput").addEventListener("change", (e) => {
     milestoneName = e.target.value.trim() || "Road to Volume 21";
     saveChecklist();
   });
 
-  document.querySelectorAll("#seriesFilterGroup .strip-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      activeSeriesFilter = btn.dataset.series;
-      updateFilterButtons();
-      renderBookshelf();
-    });
-  });
-
+  // Library Status Filter Strip
   document.querySelectorAll("#statusFilterGroup .strip-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeStatusFilter = btn.dataset.status;
@@ -883,8 +1200,45 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Library Live Search
+  document.getElementById("bookSearchInput").addEventListener("input", (e) => {
+    bookSearchQuery = e.target.value;
+    renderBookshelf();
+  });
+
+  // Keyboard Shortcuts
+  window.addEventListener("keydown", (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      switchView("library");
+      document.getElementById("bookSearchInput").focus();
+      return;
+    }
+
+    if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r")) {
+      e.preventDefault();
+      fetchData();
+      return;
+    }
+
+    if (e.key === "Escape") {
+      document.getElementById("settingsModal").classList.remove("open");
+      return;
+    }
+
+    if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === "1") switchView("dashboard");
+      else if (e.key === "2") switchView("checklist");
+      else if (e.key === "3") switchView("analytics");
+      else if (e.key === "4") switchView("library");
+    }
+  });
+
   window.addEventListener("resize", () => {
-    if (stateData) renderCharts();
+    if (stateData && activeView === "analytics") renderCharts();
   });
 
   if (window.__TAURI__ && window.__TAURI__.event) {
