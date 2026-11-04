@@ -1414,6 +1414,57 @@ canvas {
   color: #ffffff;
 }
 
+/* Checklist Drag & Drop Reordering */
+.checklist-row {
+  cursor: grab;
+  transition: background-color 0.08s ease;
+}
+
+.checklist-row:active {
+  cursor: grabbing;
+}
+
+.drag-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.drag-grip {
+  display: inline-block;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1;
+  margin-right: 5px;
+  vertical-align: middle;
+  cursor: grab;
+  opacity: 0.65;
+  transition: color 0.12s ease, opacity 0.12s ease;
+}
+
+.checklist-row:hover .drag-grip {
+  color: var(--violet);
+  opacity: 1;
+}
+
+.checklist-row.dragging-row {
+  background-color: #e9e2f8 !important;
+  outline: 2px solid var(--violet);
+  outline-offset: -2px;
+  box-shadow: 0 4px 12px rgba(85, 53, 134, 0.22);
+  position: relative;
+  z-index: 5;
+}
+
+.checklist-row.dragging-row .drag-grip {
+  color: var(--crimson);
+  opacity: 1;
+}
+
+body.is-dragging-checklist,
+body.is-dragging-checklist * {
+  cursor: grabbing !important;
+}
+
 /* 3. Native Bottom Status Bar */
 .statusbar {
   background-color: #0d0b11;

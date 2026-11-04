@@ -233,6 +233,16 @@ async function saveChecklist() {
   }
 }
 
+function getOrderedChecklistBooks() {
+  if (!stateData) return [];
+  const books = [];
+  for (const stem of milestoneStems) {
+    const b = bookLookupMap.get(stem);
+    if (b) books.push(b);
+  }
+  return books;
+}
+
 function toggleMilestoneStem(stem) {
   if (milestoneStems.has(stem)) {
     milestoneStems.delete(stem);
@@ -246,13 +256,14 @@ function toggleMilestoneStem(stem) {
 function renderSidebarAndStatus() {
   const ov = stateData.overall;
   const sessCount = (stateData.sessions || []).length;
+  const orderedChecklistBooks = getOrderedChecklistBooks();
 
   document.getElementById("statePathSubtitle").textContent =
     `LIVE WATCHER: ${stateData.stateDir}`;
   document.getElementById("statusTotalsLabel").textContent =
     `${ov.completedBooks}/${ov.totalBooks} VOLUMES · ${sessCount} SESSIONS`;
 
-  document.getElementById("navChecklistCount").textContent = `(${milestoneStems.size})`;
+  document.getElementById("navChecklistCount").textContent = `(${orderedChecklistBooks.length})`;
   document.getElementById("navLibraryCount").textContent = `(${ov.totalBooks})`;
 
   // Pinned "Now Reading" card
@@ -261,8 +272,8 @@ function renderSidebarAndStatus() {
   let eyebrowText = "NOW READING";
 
   if (!activeBook) {
-    // Fallback to first unread book in checklist, or first book
-    activeBook = allBooks.find((b) => milestoneStems.has(b.stem) && b.status !== "completed") || allBooks[0];
+    // Fallback to first unread book in checklist (in custom order), or first book
+    activeBook = orderedChecklistBooks.find((b) => b.status !== "completed") || allBooks[0];
     eyebrowText = activeBook ? "UP NEXT IN QUEUE" : "NO ACTIVE VOLUME";
   }
 
@@ -403,9 +414,101 @@ function renderSeriesTable(pace) {
   `;
 }
 
+let isDraggingChecklist = false;
+let suppressNextChecklistClick = false;
+
+function updateChecklistRowNumbers(tbody) {
+  Array.from(tbody.querySelectorAll("tr.checklist-row")).forEach((row, i) => {
+    const numEl = row.querySelector(".row-num");
+    if (numEl) numEl.textContent = String(i + 1).padStart(2, "0");
+  });
+}
+
+function initChecklistDragAndDrop() {
+  const tbody = document.getElementById("milestoneTableBody");
+  if (!tbody) return;
+
+  let dragRow = null;
+  let dragStartY = 0;
+
+  tbody.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest(".tbl-remove-btn")) return;
+    const tr = e.target.closest("tr.checklist-row");
+    if (!tr) return;
+
+    dragRow = tr;
+    dragStartY = e.clientY;
+    isDraggingChecklist = false;
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!dragRow) return;
+
+    if (!isDraggingChecklist) {
+      if (Math.abs(e.clientY - dragStartY) < 4) return;
+      isDraggingChecklist = true;
+      suppressNextChecklistClick = true;
+      dragRow.classList.add("dragging-row");
+      document.body.classList.add("is-dragging-checklist");
+    }
+
+    e.preventDefault();
+
+    const siblings = Array.from(
+      tbody.querySelectorAll("tr.checklist-row:not(.dragging-row)")
+    );
+    const nextSibling = siblings.find((sib) => {
+      const rect = sib.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    });
+
+    if (nextSibling) {
+      if (dragRow.nextElementSibling !== nextSibling) {
+        tbody.insertBefore(dragRow, nextSibling);
+        updateChecklistRowNumbers(tbody);
+      }
+    } else if (tbody.lastElementChild !== dragRow) {
+      tbody.appendChild(dragRow);
+      updateChecklistRowNumbers(tbody);
+    }
+  });
+
+  const finishDrag = () => {
+    if (!dragRow) return;
+    const wasDragging = isDraggingChecklist;
+
+    dragRow.classList.remove("dragging-row");
+    document.body.classList.remove("is-dragging-checklist");
+    dragRow = null;
+    isDraggingChecklist = false;
+
+    if (wasDragging) {
+      const domStems = Array.from(tbody.querySelectorAll("tr.checklist-row"))
+        .map((r) => r.dataset.stem)
+        .filter(Boolean);
+      const domStemSet = new Set(domStems);
+      for (const s of milestoneStems) {
+        if (!domStemSet.has(s)) domStems.push(s);
+      }
+      milestoneStems = new Set(domStems);
+      saveChecklist();
+      renderSidebarAndStatus();
+      if (activeStatusFilter === "milestone") {
+        renderBookshelf();
+      }
+      setTimeout(() => {
+        suppressNextChecklistClick = false;
+      }, 0);
+    }
+  };
+
+  window.addEventListener("pointerup", finishDrag);
+  window.addEventListener("pointercancel", finishDrag);
+}
+
 function renderMilestone(pace) {
-  const allBooks = stateData.series.flatMap((s) => s.books);
-  const selectedBooks = allBooks.filter((b) => milestoneStems.has(b.stem));
+  const selectedBooks = getOrderedChecklistBooks();
 
   const totalChars = selectedBooks.reduce((a, b) => a + b.totalChars, 0);
   const readChars = selectedBooks.reduce((a, b) => a + b.readChars, 0);
@@ -438,6 +541,8 @@ function renderMilestone(pace) {
 
   selectedBooks.forEach((b, idx) => {
     const tr = document.createElement("tr");
+    tr.className = "checklist-row";
+    tr.dataset.stem = b.stem;
     const estSec = pace.cph > 0 ? (b.remainingChars / pace.cph) * 3600 : 0;
     const statusText =
       b.status === "completed"
@@ -447,7 +552,9 @@ function renderMilestone(pace) {
         : "UNREAD";
 
     tr.innerHTML = `
-      <td class="center">${String(idx + 1).padStart(2, "0")}</td>
+      <td class="center drag-cell" title="Drag to reorder">
+        <span class="drag-grip">⠿</span><span class="row-num">${String(idx + 1).padStart(2, "0")}</span>
+      </td>
       <td class="series-name-cell">${shortBookTitle(b.title)}</td>
       <td>${getSeriesCategoryLabel(b.series)}</td>
       <td class="center"><span class="tbl-status ${b.status}">${statusText}</span></td>
@@ -459,7 +566,10 @@ function renderMilestone(pace) {
         <button class="tbl-remove-btn" data-stem="${b.stem}">REMOVE</button>
       </td>
     `;
-    tr.querySelector(".series-name-cell").onclick = () => inspectBookInLibrary(b.stem);
+    tr.querySelector(".series-name-cell").onclick = () => {
+      if (suppressNextChecklistClick) return;
+      inspectBookInLibrary(b.stem);
+    };
     tr.querySelector(".tbl-remove-btn").onclick = (e) => {
       e.stopPropagation();
       toggleMilestoneStem(b.stem);
@@ -873,16 +983,15 @@ function renderBookshelf() {
   const grid = document.getElementById("booksGrid");
   grid.innerHTML = "";
 
-  let books = stateData.series.flatMap((s) => s.books);
+  let books =
+    activeStatusFilter === "milestone"
+      ? getOrderedChecklistBooks()
+      : stateData.series.flatMap((s) => s.books);
   if (activeSeriesFilter !== "all") {
     books = books.filter((b) => b.series === activeSeriesFilter);
   }
-  if (activeStatusFilter !== "all") {
-    if (activeStatusFilter === "milestone") {
-      books = books.filter((b) => milestoneStems.has(b.stem));
-    } else {
-      books = books.filter((b) => b.status === activeStatusFilter);
-    }
+  if (activeStatusFilter !== "all" && activeStatusFilter !== "milestone") {
+    books = books.filter((b) => b.status === activeStatusFilter);
   }
   if (bookSearchQuery.trim() !== "") {
     const q = bookSearchQuery.trim().toLowerCase();
@@ -1243,9 +1352,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (window.__TAURI__ && window.__TAURI__.event) {
     window.__TAURI__.event.listen("state-updated", () => {
-      fetchData();
+      if (!isDraggingChecklist) fetchData();
     });
   }
 
+  initChecklistDragAndDrop();
   fetchData();
 });
