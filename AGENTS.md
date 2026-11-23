@@ -10,6 +10,7 @@ A standalone native Windows desktop application built with **Tauri v2** (Rust ba
 - **Configuration (`release/config.json`):**
   - `hoshiReaderDir`: Optional explicit path override to the `Hoshi Reader` folder (or `null` for automatic discovery).
   - `shelves`: Configurable list of Hoshi Reader shelves (`{ shelf, slug, name, categoryLabel, filterLabel }`). Defaults to the 4 *Re:Zero* shelves (`Re:ゼロ`, `Re:ゼロ 短編集`, `Re:ゼロ Ex`, `Re:ゼロ 小編集`). Only `"shelf"` is required when adding a new shelf; other fields auto-populate if omitted.
+  - `deadlineGoal`: Optional `{ dueDate, startDate, startRemainingChars }` target finish goal persisted for the Dashboard due-date & schedule-backlog catch-up tracker (or `null`).
 - **Language- & Drive-Independent Hoshi Reader Auto-Discovery:**
   - When `hoshiReaderDir` is `null`, `discover_hoshi_reader_dir()` in `src-tauri/src/main.rs` automatically scans drive letters (`G:\`..`Z:\`, `D:\`..`F:\`, `C:\`) and `%USERPROFILE%` for any `<drive>\<localized-google-drive-folder>\Hoshi Reader\state` directory.
   - Works seamlessly across any OS/Google Drive language (`Meu Drive`, `My Drive`, `Mi unidad`, `マイドライブ`, `Mon Drive`, `Meine Ablage`, etc.) and any mounted drive letter.
@@ -45,7 +46,8 @@ rezero-tracker/
 1. **Tauri Commands (`src-tauri/src/main.rs`):**
    - `get_rezero_data() -> Value`: Auto-discovers (or reads configured) `Hoshi Reader/state`, aggregates series/overall stats for the configured shelves, reads `.shelves.json` (`availableShelves`), and loads `checklist.json` and `config.json`.
    - `save_checklist(payload: ChecklistPayload)`: Saves `{ name, stems }` to `checklist.json` next to the executable.
-   - `save_config(payload: AppConfig)`: Saves `{ hoshiReaderDir, shelves }` to `config.json` next to the executable.
+   - `save_config(payload: AppConfig)`: Saves `{ hoshiReaderDir, shelves, deadlineGoal }` to `config.json` next to the executable.
+   - `save_deadline_goal(payload: Option<DeadlineGoal>)`: Updates `deadlineGoal` in `config.json` next to the executable.
 2. **Custom URI Scheme Protocol (`rezero://`):**
    - Registered via `.register_uri_scheme_protocol("rezero", ...)`.
    - Accessed from the WebView2 frontend at `http://rezero.localhost/cover?stem=...&gen=...&file=...` to stream book covers directly from the resolved `Hoshi Reader/books` folder.

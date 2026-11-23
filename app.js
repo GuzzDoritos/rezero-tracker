@@ -334,6 +334,209 @@ function renderOverview(pace) {
   }
 }
 
+function getTodayReadingStats() {
+  const nowMs = (stateData && stateData.generatedAt) || Date.now();
+  const todayKey = toDateKey(nowMs);
+  const todayEntry = dailyDetailsMap.get(todayKey);
+  const charsReadToday = todayEntry ? todayEntry.totalChars : 0;
+  const secReadToday = todayEntry ? todayEntry.totalSec : 0;
+  const remNow = stateData && stateData.overall ? stateData.overall.remainingChars : 0;
+  const remStartOfToday = remNow + charsReadToday;
+  return { nowMs, todayKey, charsReadToday, secReadToday, remNow, remStartOfToday };
+}
+
+async function setDeadlineGoal(dueDateStr) {
+  if (!dueDateStr || !stateData) return;
+  const { todayKey, remStartOfToday } = getTodayReadingStats();
+  const goalPayload = {
+    dueDate: dueDateStr,
+    startDate: todayKey,
+    startRemainingChars: remStartOfToday,
+  };
+  if (!stateData.config) stateData.config = {};
+  stateData.config.deadlineGoal = goalPayload;
+  renderAll();
+  try {
+    await window.__TAURI__.core.invoke("save_deadline_goal", { payload: goalPayload });
+  } catch (e) {
+    console.error("Failed to save deadline goal:", e);
+  }
+}
+
+async function clearDeadlineGoal() {
+  if (!stateData) return;
+  if (!stateData.config) stateData.config = {};
+  stateData.config.deadlineGoal = null;
+  const input = document.getElementById("goalDueDateInput");
+  if (input) input.value = "";
+  renderAll();
+  try {
+    await window.__TAURI__.core.invoke("save_deadline_goal", { payload: null });
+  } catch (e) {
+    console.error("Failed to clear deadline goal:", e);
+  }
+}
+
+function renderDeadlineGoal(pace) {
+  const goal = stateData && stateData.config ? stateData.config.deadlineGoal : null;
+  const inputEl = document.getElementById("goalDueDateInput");
+  const resetBtn = document.getElementById("resetGoalBaselineBtn");
+  const clearBtn = document.getElementById("clearGoalBtn");
+  const badgeEl = document.getElementById("goalStatusBadge");
+  const emptyHintEl = document.getElementById("goalEmptyHint");
+  const gridEl = document.getElementById("goalMetricsGrid");
+  const catchupCell = document.getElementById("goalCatchupCell");
+
+  if (!inputEl || !badgeEl || !emptyHintEl || !gridEl) return;
+
+  if (!goal || !goal.dueDate) {
+    inputEl.value = "";
+    resetBtn.style.display = "none";
+    clearBtn.style.display = "none";
+    emptyHintEl.style.display = "block";
+    gridEl.style.display = "none";
+    badgeEl.className = "goal-status-badge";
+    badgeEl.textContent = "NO DUE DATE SET";
+    return;
+  }
+
+  inputEl.value = goal.dueDate;
+  resetBtn.style.display = "inline-block";
+  clearBtn.style.display = "inline-block";
+  emptyHintEl.style.display = "none";
+  gridEl.style.display = "grid";
+
+  const { todayKey, charsReadToday, remNow, remStartOfToday } = getTodayReadingStats();
+  const todayNoon = new Date(todayKey + "T12:00:00");
+  const dueNoon = new Date(goal.dueDate + "T12:00:00");
+  if (isNaN(dueNoon.getTime())) return;
+  const startKey = goal.startDate || todayKey;
+  const parsedStart = new Date(startKey + "T12:00:00");
+  const startNoon = isNaN(parsedStart.getTime()) ? todayNoon : parsedStart;
+  const startRem = goal.startRemainingChars > 0 ? goal.startRemainingChars : remStartOfToday;
+
+  const diffDays = Math.round((dueNoon - todayNoon) / 86400000);
+  const daysLeftInclToday = diffDays + 1;
+  const daysLeftAfterToday = Math.max(0, diffDays);
+  const totalGoalDays = Math.max(1, Math.round((dueNoon - startNoon) / 86400000) + 1);
+  const baselineDailyQuota = startRem / totalGoalDays;
+
+  const daysLeftValEl = document.getElementById("goalDaysLeftVal");
+  const daysLeftSubEl = document.getElementById("goalDaysLeftSub");
+  const reqPaceValEl = document.getElementById("goalReqPaceVal");
+  const reqPaceSubEl = document.getElementById("goalReqPaceSub");
+  const todayRemValEl = document.getElementById("goalTodayRemVal");
+  const todayBarEl = document.getElementById("goalTodayBar");
+  const todayRemSubEl = document.getElementById("goalTodayRemSub");
+  const catchupValEl = document.getElementById("goalCatchupVal");
+  const catchupSubEl = document.getElementById("goalCatchupSub");
+
+  catchupCell.classList.remove("is-behind", "is-ontrack");
+
+  if (remNow <= 0) {
+    badgeEl.className = "goal-status-badge on-track";
+    badgeEl.textContent = "COMPLETED";
+    daysLeftValEl.textContent = "COMPLETED";
+    daysLeftSubEl.textContent = `Due ${goal.dueDate.replace(/-/g, ".")} · All active shelves finished`;
+    reqPaceValEl.textContent = "0 chars/day";
+    reqPaceSubEl.textContent = "Target archive complete";
+    todayRemValEl.textContent = "DONE!";
+    todayBarEl.style.width = "100%";
+    todayRemSubEl.textContent = `Read today: ${fmtNum(charsReadToday)} chars`;
+    catchupCell.classList.add("is-ontrack");
+    catchupValEl.textContent = "ON TRACK (0 chars)";
+    catchupSubEl.textContent = "Series complete";
+    return;
+  }
+
+  if (daysLeftInclToday <= 0) {
+    const daysOverdue = Math.abs(diffDays);
+    const remSec = pace.cph > 0 ? (remNow / pace.cph) * 3600 : 0;
+    badgeEl.className = "goal-status-badge overdue";
+    badgeEl.textContent = `OVERDUE (${daysOverdue}d PAST DUE)`;
+    daysLeftValEl.textContent = "PAST DUE";
+    daysLeftSubEl.textContent = `Due ${goal.dueDate.replace(/-/g, ".")} · Locked ${startKey.replace(/-/g, ".")} (${fmtNum(baselineDailyQuota)}/d)`;
+    reqPaceValEl.textContent = `${fmtNum(remNow)} chars left`;
+    reqPaceSubEl.textContent = pace.cph > 0 ? `~${formatHHMM(remSec)} total reading left` : "Past due date";
+    todayRemValEl.textContent = `${fmtNum(remNow)} chars`;
+    todayBarEl.style.width = `${remStartOfToday > 0 ? Math.min(100, (charsReadToday / remStartOfToday) * 100) : 0}%`;
+    todayRemSubEl.textContent = `Read today: ${fmtNum(charsReadToday)} chars`;
+    catchupCell.classList.add("is-behind");
+    catchupValEl.textContent = `${fmtNum(remNow)} chars today`;
+    catchupSubEl.textContent = `Finish remaining archive to clear overdue goal${pace.cph > 0 ? ` (~${formatHHMM(remSec)})` : ""}`;
+    return;
+  }
+
+  // Adjusted daily target from today through due date (inclusive)
+  const dailyTargetFromToday = remStartOfToday / daysLeftInclToday;
+  const reqSecPerDay = pace.cph > 0 ? (dailyTargetFromToday / pace.cph) * 3600 : 0;
+  const remTodayAdjusted = Math.max(0, dailyTargetFromToday - charsReadToday);
+  const remTodaySec = pace.cph > 0 ? (remTodayAdjusted / pace.cph) * 3600 : 0;
+  const todayPct = dailyTargetFromToday > 0 ? Math.min(100, (charsReadToday / dailyTargetFromToday) * 100) : 100;
+
+  // Schedule Backlog model against locked baseline daily quota
+  const idealRemStartOfToday = Math.min(startRem, baselineDailyQuota * daysLeftInclToday);
+  const idealRemEndOfToday = Math.min(startRem, baselineDailyQuota * daysLeftAfterToday);
+  const pastBacklog = Math.round(remStartOfToday - idealRemStartOfToday);
+  const catchUpTotalToday = Math.max(0, remStartOfToday - idealRemEndOfToday);
+  const catchUpRemToday = Math.max(0, remNow - idealRemEndOfToday);
+  const catchUpRemSec = pace.cph > 0 ? (catchUpRemToday / pace.cph) * 3600 : 0;
+  const aheadChars = Math.max(0, Math.round(idealRemEndOfToday - remNow));
+
+  const isBehindBaseline = pastBacklog > 50 && catchUpRemToday > 0;
+  const isCaughtUpToday = catchUpRemToday <= 50;
+
+  if (isBehindBaseline) {
+    badgeEl.className = "goal-status-badge behind";
+    badgeEl.textContent = `BEHIND SCHEDULE (+${fmtNum(pastBacklog)} BACKLOG)`;
+  } else if (isCaughtUpToday && aheadChars > 500) {
+    badgeEl.className = "goal-status-badge ahead";
+    badgeEl.textContent = `AHEAD OF TRACK (+${fmtNum(aheadChars)} CHARS)`;
+  } else if (isCaughtUpToday) {
+    badgeEl.className = "goal-status-badge on-track";
+    badgeEl.textContent = "ON TRACK · TODAY DONE";
+  } else {
+    badgeEl.className = "goal-status-badge on-track";
+    badgeEl.textContent = "ON SCHEDULE · TODAY IN PROGRESS";
+  }
+
+  daysLeftValEl.textContent = `${daysLeftInclToday} ${daysLeftInclToday === 1 ? "DAY" : "DAYS"}`;
+  daysLeftSubEl.textContent = `Due ${goal.dueDate.replace(/-/g, ".")} · Locked ${startKey.replace(/-/g, ".")} (${fmtNum(baselineDailyQuota)}/d)`;
+
+  reqPaceValEl.textContent = `${fmtNum(dailyTargetFromToday)} chars/day`;
+  reqPaceSubEl.textContent =
+    pace.cph > 0
+      ? `~${formatHHMM(reqSecPerDay)} / day at current speed (${fmtNum(pace.charsPerDay)}/d avg)`
+      : `Current avg: ${fmtNum(pace.charsPerDay)} chars/day`;
+
+  todayRemValEl.textContent = remTodayAdjusted <= 0 ? "DONE TODAY!" : `${fmtNum(remTodayAdjusted)} chars`;
+  todayBarEl.style.width = `${todayPct}%`;
+  todayRemSubEl.textContent = `Read today: ${fmtNum(charsReadToday)} / ${fmtNum(dailyTargetFromToday)} chars${
+    remTodayAdjusted > 0 && pace.cph > 0 ? ` (~${formatHHMM(remTodaySec)} left)` : ""
+  }`;
+
+  if (isBehindBaseline) {
+    catchupCell.classList.add("is-behind");
+    catchupValEl.textContent = `${fmtNum(catchUpRemToday)} chars today`;
+    catchupSubEl.textContent = `Read ${fmtNum(charsReadToday)} / ${fmtNum(catchUpTotalToday)} (${fmtNum(pastBacklog)} backlog + ${fmtNum(baselineDailyQuota)} today)${
+      pace.cph > 0 ? ` · ~${formatHHMM(catchUpRemSec)}` : ""
+    }`;
+  } else if (isCaughtUpToday) {
+    catchupCell.classList.add("is-ontrack");
+    catchupValEl.textContent = "ON TRACK (0 chars)";
+    catchupSubEl.textContent =
+      aheadChars > 50
+        ? `${fmtNum(aheadChars)} chars ahead of ${fmtNum(baselineDailyQuota)}/day baseline`
+        : `Caught up with ${fmtNum(baselineDailyQuota)} chars/day baseline`;
+  } else {
+    catchupCell.classList.add("is-ontrack");
+    catchupValEl.textContent = `${fmtNum(catchUpRemToday)} chars today`;
+    catchupSubEl.textContent = `No past backlog · Finish today's ${fmtNum(baselineDailyQuota)} quota${
+      pace.cph > 0 ? ` (~${formatHHMM(catchUpRemSec)} left)` : ""
+    }`;
+  }
+}
+
 function renderSeriesTable(pace) {
   const tbody = document.getElementById("seriesTableBody");
   const tfoot = document.getElementById("seriesTableFoot");
@@ -1219,6 +1422,7 @@ async function saveSettingsFromModal() {
   const payload = {
     hoshiReaderDir: dirVal === "" ? null : dirVal,
     shelves,
+    deadlineGoal: (stateData && stateData.config && stateData.config.deadlineGoal) || null,
   };
 
   try {
@@ -1236,6 +1440,7 @@ function renderAll() {
   const pace = computePaceStats();
   renderSidebarAndStatus();
   renderOverview(pace);
+  renderDeadlineGoal(pace);
   renderSeriesTable(pace);
   renderMilestone(pace);
   renderHeatmap();
@@ -1282,6 +1487,20 @@ document.addEventListener("DOMContentLoaded", () => {
     selectedPaceWindow = e.target.value;
     renderAll();
   });
+
+  // Target Finish Due Date Controls
+  document.getElementById("goalDueDateInput").addEventListener("change", (e) => {
+    if (e.target.value) {
+      setDeadlineGoal(e.target.value);
+    } else {
+      clearDeadlineGoal();
+    }
+  });
+  document.getElementById("resetGoalBaselineBtn").addEventListener("click", () => {
+    const val = document.getElementById("goalDueDateInput").value;
+    if (val) setDeadlineGoal(val);
+  });
+  document.getElementById("clearGoalBtn").addEventListener("click", clearDeadlineGoal);
 
   // Reload & Settings Modal
   document.getElementById("refreshBtn").addEventListener("click", fetchData);

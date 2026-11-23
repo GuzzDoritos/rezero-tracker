@@ -170,6 +170,61 @@
           </div>
         </div>
 
+        <!-- Target Finish Due Date & Catch-Up Tracker -->
+        <div class="goal-frame" id="goalFrame">
+          <div class="goal-header-bar">
+            <div class="goal-title-group">
+              <span class="goal-eyebrow">TARGET FINISH GOAL</span>
+              <span class="goal-title-jp">◆ 目標読了日・軌道修正トラッカー ◆</span>
+              <span class="goal-status-badge" id="goalStatusBadge">NO DUE DATE SET</span>
+            </div>
+
+            <div class="goal-controls">
+              <label class="goal-input-label" for="goalDueDateInput">TARGET DUE DATE</label>
+              <input type="date" id="goalDueDateInput" class="goal-date-input" />
+              <button id="resetGoalBaselineBtn" class="goal-action-btn" title="Re-lock baseline schedule starting from today" style="display: none;">
+                RE-LOCK BASELINE
+              </button>
+              <button id="clearGoalBtn" class="goal-action-btn" title="Clear target due date" style="display: none;">
+                CLEAR
+              </button>
+            </div>
+          </div>
+
+          <div class="goal-empty-hint" id="goalEmptyHint">
+            Select a target finish due date above to calculate your required daily reading quota and single-day catch-up target.
+          </div>
+
+          <div class="goal-metrics-grid" id="goalMetricsGrid" style="display: none;">
+            <div class="goal-cell">
+              <span class="cell-label">TIME UNTIL DUE DATE / 残り日数</span>
+              <strong class="goal-val" id="goalDaysLeftVal">--</strong>
+              <span class="goal-sub" id="goalDaysLeftSub">Baseline: --</span>
+            </div>
+
+            <div class="goal-cell">
+              <span class="cell-label">REQUIRED PACE (FROM TODAY) / 必要日次ペース</span>
+              <strong class="goal-val" id="goalReqPaceVal">--</strong>
+              <span class="goal-sub" id="goalReqPaceSub">--</span>
+            </div>
+
+            <div class="goal-cell">
+              <span class="cell-label">LEFT FOR TODAY'S QUOTA / 本日の残りノルマ</span>
+              <strong class="goal-val" id="goalTodayRemVal">--</strong>
+              <div class="sharp-bar goal-mini-bar">
+                <div class="sharp-bar-fill" id="goalTodayBar" style="width: 0%"></div>
+              </div>
+              <span class="goal-sub" id="goalTodayRemSub">--</span>
+            </div>
+
+            <div class="goal-cell goal-catchup-cell" id="goalCatchupCell">
+              <span class="cell-label">1-DAY CATCH-UP TO TRACK / 1日で軌道修正</span>
+              <strong class="goal-val" id="goalCatchupVal">--</strong>
+              <span class="goal-sub" id="goalCatchupSub">--</span>
+            </div>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table class="editorial-table">
             <thead>

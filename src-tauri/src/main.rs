@@ -89,11 +89,23 @@ fn default_shelves() -> Vec<ShelfConfig> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct DeadlineGoal {
+    #[serde(rename = "dueDate")]
+    due_date: String,
+    #[serde(rename = "startDate")]
+    start_date: String,
+    #[serde(rename = "startRemainingChars")]
+    start_remaining_chars: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppConfig {
     #[serde(rename = "hoshiReaderDir", default)]
     hoshi_reader_dir: Option<String>,
     #[serde(default = "default_shelves")]
     shelves: Vec<ShelfConfig>,
+    #[serde(rename = "deadlineGoal", default)]
+    deadline_goal: Option<DeadlineGoal>,
 }
 
 impl Default for AppConfig {
@@ -101,6 +113,7 @@ impl Default for AppConfig {
         Self {
             hoshi_reader_dir: None,
             shelves: default_shelves(),
+            deadline_goal: None,
         }
     }
 }
@@ -710,6 +723,16 @@ fn save_config(payload: AppConfig) -> Result<Value, String> {
     Ok(json!({ "ok": true }))
 }
 
+#[tauri::command]
+fn save_deadline_goal(payload: Option<DeadlineGoal>) -> Result<Value, String> {
+    let mut config = load_config();
+    config.deadline_goal = payload;
+    let path = resolve_app_file("config.json");
+    let body = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, body).map_err(|e| e.to_string())?;
+    Ok(json!({ "ok": true, "config": config }))
+}
+
 fn parse_query_param(query: &str, key: &str) -> Option<String> {
     for pair in query.split('&') {
         let mut parts = pair.splitn(2, '=');
@@ -830,7 +853,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_rezero_data,
             save_checklist,
-            save_config
+            save_config,
+            save_deadline_goal
         ])
         .run(tauri::generate_context!())
         .expect("error while running Re:Zero Reading Archive Tauri application");
